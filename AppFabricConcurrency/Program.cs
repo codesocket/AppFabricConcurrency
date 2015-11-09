@@ -10,6 +10,7 @@ namespace AppFabricConcurrency
     {
         static void Main(string[] args)
         {
+
         }
     }
 }
