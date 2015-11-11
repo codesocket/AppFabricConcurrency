@@ -5,6 +5,8 @@ namespace CacheAPISample
     using System.Collections.Generic;
     using System.Linq;
     using Microsoft.ApplicationServer.Caching;
+    using System.Threading;
+    using System.Threading.Tasks;
 
     class Program
     {
@@ -16,8 +18,18 @@ namespace CacheAPISample
         {
             Program program = new Program();
             program.PrepareClient();
-            program.RunSampleTest();
+            program.Init();
+            List<Task> taskCollection = new List<Task>();
+            Random random = new Random();
+            for( int i =0; i < 100; i++)
+            {
+                
+                Console.WriteLine("Executing the test " + i);
+                var t = Task.Factory.StartNew(x => program.Test((int)x), i);
+                taskCollection.Add(t);
+            }
 
+            Task.WaitAll(taskCollection.ToArray());
             Console.WriteLine("Press any key to continue ...");
             Console.ReadLine();
         }
@@ -596,13 +608,15 @@ namespace CacheAPISample
             //Specify Cache Host Details 
             //  Parameter 1 = host name
             //  Parameter 2 = cache port number
-            servers.Add(new DataCacheServerEndpoint("USSECVMDATFAC02.eydev.net", 22233));
+            servers.Add(new DataCacheServerEndpoint("US3379028W1", 22233));
 
             //Create cache configuration
             DataCacheFactoryConfiguration configuration = new DataCacheFactoryConfiguration();
 
             //Set the cache host(s)
             configuration.Servers = servers;
+
+            configuration.SecurityProperties = new DataCacheSecurity(DataCacheSecurityMode.None, DataCacheProtectionLevel.None);
 
             //Set default properties for local cache (local cache disabled)
             configuration.LocalCacheProperties = new DataCacheLocalCacheProperties();
@@ -616,5 +630,28 @@ namespace CacheAPISample
             //Get reference to named cache called "default"
             myDefaultCache = myCacheFactory.GetCache("default");
         }
-    }
+
+        public void Init()
+        {
+            myDefaultCache.Put("key1", DateTime.Now.ToString());
+        }
+
+        public void Test(int instanceid)
+        {
+            DataCacheLockHandle handle = null;
+            handle = RetryHelper.Execute(
+                () => 
+                    {
+                        DataCacheLockHandle innerHandle = null;
+                        var output = myDefaultCache.GetAndLock("key1", TimeSpan.FromSeconds(10), out innerHandle);
+                        Console.WriteLine("output of instance id " + instanceid + " output " + output);
+                        return innerHandle;
+                    }, (ex) => true, 50, false, 50);
+
+            var r = new Random();
+            Thread.Sleep(r.Next(1, 100));
+            myDefaultCache.PutAndUnlock("key1", DateTime.Now.ToString(), handle);
+        }
+
+     }
 }
